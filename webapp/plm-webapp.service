@@ -1,0 +1,32 @@
+# Systemd service file for PLM Localization Web App
+#
+# Install:
+#   sudo cp plm-webapp.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable plm-webapp
+#   sudo systemctl start plm-webapp
+#
+# Logs:
+#   sudo journalctl -u plm-webapp -f
+
+[Unit]
+Description=PLM Protein Localization Web App
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/subcellular-localization-PLM/webapp
+Environment="PATH=/home/ubuntu/subcellular-localization-PLM/webapp/venv/bin:/usr/bin"
+ExecStart=/home/ubuntu/subcellular-localization-PLM/webapp/venv/bin/gunicorn \
+    --bind 0.0.0.0:5000 \
+    --workers 1 \
+    --threads 4 \
+    --timeout 300 \
+    --preload \
+    app:app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

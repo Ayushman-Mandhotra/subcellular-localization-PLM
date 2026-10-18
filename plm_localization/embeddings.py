@@ -8,6 +8,9 @@ from transformers import AutoModel, AutoTokenizer, T5EncoderModel, T5Tokenizer
 from .config import Config
 from .pooling import pool_residue_embeddings
 
+# Module-level backbone cache to avoid reloading ~3 GB model on every call
+_cached_backbone: dict = {}
+
 def to_spaced_tokens(seq: str) -> str:
     return " ".join(list(seq))
 
@@ -28,11 +31,16 @@ def compute_features(
     embed_max_res = 500 if cfg.pooling == "mean_tail_250_500" else cfg.nterm_max_res
 
     if cfg.backbone == "prott5":
-        tok = T5Tokenizer.from_pretrained(cfg.prott5_name, do_lower_case=False)
-        if device.type == "cuda":
-            model = T5EncoderModel.from_pretrained(cfg.prott5_name, torch_dtype=torch.float16).to(device).eval()
+        cache_key = ("prott5", cfg.prott5_name, str(device))
+        if cache_key in _cached_backbone:
+            tok, model = _cached_backbone[cache_key]
         else:
-            model = T5EncoderModel.from_pretrained(cfg.prott5_name).to(device).eval()
+            tok = T5Tokenizer.from_pretrained(cfg.prott5_name, do_lower_case=False)
+            if device.type == "cuda":
+                model = T5EncoderModel.from_pretrained(cfg.prott5_name, torch_dtype=torch.float16).to(device).eval()
+            else:
+                model = T5EncoderModel.from_pretrained(cfg.prott5_name).to(device).eval()
+            _cached_backbone[cache_key] = (tok, model)
 
         eos_id = getattr(tok, "eos_token_id", None)
         pad_id = getattr(tok, "pad_token_id", None)

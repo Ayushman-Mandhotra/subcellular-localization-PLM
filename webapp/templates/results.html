@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prediction Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Prediction Results</h1>
+            <p class="subtitle">
+                {{ n_sequences }} sequence{{ 's' if n_sequences != 1 }} processed in {{ elapsed }}s
+            </p>
+        </header>
+
+        {% if has_asafind %}
+        <div class="card comparison-summary">
+            <h2>ASAFind Comparison</h2>
+            <div class="stats-row">
+                <div class="stat">
+                    <span class="stat-value">{{ compared_count }}</span>
+                    <span class="stat-label">Compared</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">{{ agree_count }}</span>
+                    <span class="stat-label">Agree</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">{{ "%.1f" | format(agree_count / compared_count * 100 if compared_count else 0) }}%</span>
+                    <span class="stat-label">Agreement</span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="table-actions">
+                <div class="search-box">
+                    <input type="text" id="search" placeholder="Filter by ID or class..." oninput="filterTable()">
+                </div>
+                <div class="download-links">
+                    <a href="{{ url_for('download', cache_key=cache_key, fmt='csv') }}" class="btn-download">Download CSV</a>
+                    <a href="{{ url_for('download', cache_key=cache_key, fmt='json') }}" class="btn-download">Download JSON</a>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table id="results-table">
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable(0)">Sequence ID</th>
+                            <th>Sequence</th>
+                            <th class="sortable" onclick="sortTable(2)">Predicted Class</th>
+                            <th class="sortable" onclick="sortTable(3)">Confidence</th>
+                            {% if has_asafind %}
+                            <th>ASAFind</th>
+                            <th class="sortable" onclick="sortTable(5)">Match</th>
+                            {% endif %}
+                            <th>Probabilities</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in results %}
+                        <tr class="{{ 'row-disagree' if r.agree is defined and not r.agree else '' }}">
+                            <td class="mono">{{ r.seq_id }}</td>
+                            <td class="mono seq-preview" title="{{ r.sequence_preview }}">{{ r.sequence_preview }}</td>
+                            <td>
+                                <span class="class-tag class-{{ r.predicted_class | replace(' ', '-') | replace('/', '-') | replace(':', '-') | replace('.', '') | lower }}">
+                                    {{ r.predicted_class }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="confidence-bar">
+                                    <div class="confidence-fill" style="width: {{ (r.confidence * 100) | int }}%"></div>
+                                    <span class="confidence-text">{{ "%.1f" | format(r.confidence * 100) }}%</span>
+                                </div>
+                            </td>
+                            {% if has_asafind %}
+                            <td>{{ r.asafind_label | default('-', true) }}</td>
+                            <td>
+                                {% if r.agree is defined %}
+                                <span class="match-icon {{ 'match-yes' if r.agree else 'match-no' }}">
+                                    {{ '&#10003;' if r.agree else '&#10007;' }}
+                                </span>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            <td>
+                                <button class="btn-expand" onclick="toggleProbs(this)">Show</button>
+                                <div class="prob-detail" style="display:none;">
+                                    {% for cls in class_names %}
+                                    <div class="prob-row">
+                                        <span class="prob-label">{{ cls }}</span>
+                                        <div class="prob-bar-bg">
+                                            <div class="prob-bar-fill" style="width: {{ (r.probabilities[cls] * 100) | int }}%"></div>
+                                        </div>
+                                        <span class="prob-value">{{ "%.1f" | format(r.probabilities[cls] * 100) }}%</span>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="actions">
+            <a href="{{ url_for('index') }}" class="btn-back">&larr; New Prediction</a>
+        </div>
+
+        <footer>
+            <p>PLM Subcellular Localization &mdash; ProtT5-XL + PooledMLP</p>
+        </footer>
+    </div>
+
+    <script>
+        function toggleProbs(btn) {
+            var detail = btn.nextElementSibling;
+            if (detail.style.display === 'none') {
+                detail.style.display = 'block';
+                btn.textContent = 'Hide';
+            } else {
+                detail.style.display = 'none';
+                btn.textContent = 'Show';
+            }
+        }
+
+        function filterTable() {
+            var q = document.getElementById('search').value.toLowerCase();
+            var rows = document.querySelectorAll('#results-table tbody tr');
+            rows.forEach(function(row) {
+                var text = row.textContent.toLowerCase();
+                row.style.display = text.includes(q) ? '' : 'none';
+            });
+        }
+
+        function sortTable(colIndex) {
+            var table = document.getElementById('results-table');
+            var tbody = table.querySelector('tbody');
+            var rows = Array.from(tbody.rows);
+            var asc = table.getAttribute('data-sort-col') == colIndex &&
+                      table.getAttribute('data-sort-dir') !== 'asc';
+
+            rows.sort(function(a, b) {
+                var aVal = a.cells[colIndex].textContent.trim();
+                var bVal = b.cells[colIndex].textContent.trim();
+                var aNum = parseFloat(aVal.replace('%', ''));
+                var bNum = parseFloat(bVal.replace('%', ''));
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return asc ? aNum - bNum : bNum - aNum;
+                }
+                return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+            });
+
+            rows.forEach(function(row) { tbody.appendChild(row); });
+            table.setAttribute('data-sort-col', colIndex);
+            table.setAttribute('data-sort-dir', asc ? 'asc' : 'desc');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLM Protein Localization Predictor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Protein Subcellular Localization Predictor</h1>
+            <p class="subtitle">
+                ProtT5-XL + PooledMLP classifier for <em>P. tricornutum</em> proteins
+                <span class="badge badge-{{ 'gpu' if 'cuda' in device else 'cpu' }}">
+                    {{ device.upper() }}
+                </span>
+            </p>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <form action="{{ url_for('predict') }}" method="POST" enctype="multipart/form-data" id="predict-form">
+            <div class="card">
+                <h2>Input Sequences</h2>
+
+                <div class="input-group">
+                    <label for="sequence">Paste sequence(s)</label>
+                    <textarea id="sequence" name="sequence" rows="6"
+                        placeholder="Paste a single protein sequence (raw amino acids) or FASTA format:
+
+>protein_1
+MFAKRVSATFLALTASFAL...
+>protein_2
+MKSVFALLAGLTALA..."></textarea>
+                    <small>Raw amino acids or FASTA format (multiple sequences supported)</small>
+                </div>
+
+                <div class="divider">
+                    <span>or</span>
+                </div>
+
+                <div class="input-group">
+                    <label for="fasta_file">Upload FASTA file</label>
+                    <input type="file" id="fasta_file" name="fasta_file" accept=".fasta,.fsa,.fa,.faa,.txt">
+                    <small>Accepts .fasta, .fsa, .fa, .faa, .txt files (max 50 MB)</small>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Optional: Compare with ASAFind</h2>
+                <div class="input-group">
+                    <label for="asafind_tab">Upload ASAFind .tab file</label>
+                    <input type="file" id="asafind_tab" name="asafind_tab" accept=".tab,.txt,.tsv">
+                    <small>If provided, predictions will be compared against ASAFind classifications</small>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-predict" id="submit-btn">
+                <span class="btn-text">Run Prediction</span>
+                <span class="btn-loading" style="display:none;">
+                    <span class="spinner"></span> Processing...
+                </span>
+            </button>
+        </form>
+
+        <div class="card info-card">
+            <h2>About This Model</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <strong>Backbone</strong>
+                    <span>ProtT5-XL-UniRef50 (frozen)</span>
+                </div>
+                <div class="info-item">
+                    <strong>Classifier</strong>
+                    <span>PooledMLP (512 &rarr; 128 &rarr; 5)</span>
+                </div>
+                <div class="info-item">
+                    <strong>Input</strong>
+                    <span>First 250 aa, mean-prefix-50 pooling</span>
+                </div>
+                <div class="info-item">
+                    <strong>Training Data</strong>
+                    <span>262 curated <em>P. tricornutum</em> sequences</span>
+                </div>
+            </div>
+            <h3>Predicted Classes</h3>
+            <div class="class-list">
+                {% for cls in class_names %}
+                <span class="class-tag class-{{ cls | replace(' ', '-') | replace('/', '-') | replace(':', '-') | replace('.', '') | lower }}">{{ cls }}</span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <footer>
+            <p>
+                PLM Subcellular Localization &mdash;
+                Based on the MSc thesis by Nikhil Thorat,
+                supervised by Dr. Ansgar Gruber
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        document.getElementById('predict-form').addEventListener('submit', function() {
+            var btn = document.getElementById('submit-btn');
+            btn.querySelector('.btn-text').style.display = 'none';
+            btn.querySelector('.btn-loading').style.display = 'inline-flex';
+            btn.disabled = true;
+        });
+    </script>
+</body>
+</html>

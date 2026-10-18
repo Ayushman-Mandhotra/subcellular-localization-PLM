@@ -1,0 +1,11 @@
+flask>=3.0
+gunicorn>=21.2
+torch>=2.0
+transformers>=4.36
+sentencepiece
+protobuf
+scikit-learn
+joblib
+numpy
+pandas
+openpyxl
